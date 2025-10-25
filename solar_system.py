@@ -104,9 +104,15 @@ for name, data in bodies_data.items():
 paused = False
 
 def set_caption(msg: str):
-    """Set the scene caption while preserving paused state marker."""
+    """Set the scene caption while preserving paused state marker.
+
+    Use styled HTML so the info area is always readable regardless of the
+    scene/browser background (white-on-dark panel with padding).
+    """
     prefix = '[PAUSED] ' if paused else ''
-    scene.caption = prefix + msg + '\n'
+    safe_msg = (prefix + msg)
+    # Use an inline-styled div so the caption is visible on dark or light themes.
+    scene.caption = f"<div style='background: rgba(0,0,0,0.65); color: #fff; padding: 8px; border-radius:6px; font-family: sans-serif; font-size:14px'>{safe_msg}</div>"
 
 # Initial caption
 set_caption('Click a body for info. Shift+Click two for relationship.')
@@ -137,36 +143,86 @@ selected = []  # Track selected bodies for Shift-click
 
 def on_click(evt):
     global selected
-    if evt.pick:  # Picked an object
-        for name, body in bodies.items():
-            # evt.pick may be the sphere or the label attached to it. Treat both as a click on this body.
-            picked_body = False
-            if evt.pick == body:
-                picked_body = True
-            else:
-                picked_label = getattr(body, 'label', None)
-                if picked_label is not None and evt.pick == picked_label:
-                    picked_body = True
-            if not picked_body:
-                continue
-                # Use the event's shift flag (evt.shift). Avoid using an undefined `keyboard` object.
-                if getattr(evt, 'shift', False):  # Shift pressed
-                    selected.append(name)
-                    if len(selected) == 2:
-                        # Keep selection order only for distance calc; sort pair for dictionary lookup
-                        pair = tuple(sorted(selected))
-                        rel = relationships.get(pair, f'No specific relationship defined for {selected[0]} and {selected[1]}.')
-                        # Compute distance as fallback/example (scaled)
-                        dist = mag(bodies[selected[0]].pos - bodies[selected[1]].pos) * 1.5e8 / 40
-                        set_caption(f'Relationship: {rel}  Distance: ~{dist:.2e} km')
-                        selected = []
-                else:
-                    # Single click: Show info
-                    set_caption(f'{name}: {bodies_data[name]["info"]}')
-                    selected = []  # Reset
-                break
+    # Diagnostic: show event type and pick target for debugging when paused
+    pick_info = getattr(evt, 'pick', None)
+    evt_name = getattr(evt, 'event', None) or getattr(evt, 'type', None) or getattr(evt, 'name', None)
+    print(f'on_click fired: event={evt_name!r}, pick={pick_info!r}, paused={paused}')
+    set_caption(f'DEBUG event={evt_name!r} pick={type(pick_info).__name__}:{getattr(pick_info, "text", "")}')
+
+    # Determine the object that should be considered "picked".
+    pick_obj = pick_info
+    if pick_obj is None:
+        # Fallback to proximity-based pick using scene.mouse.pos (may be None in some contexts)
+        try:
+            mp = scene.mouse.pos
+        except Exception:
+            mp = None
+        if mp is not None:
+            min_name = None
+            min_dist = float('inf')
+            for name, body in bodies.items():
+                d = mag(body.pos - mp)
+                if d < min_dist:
+                    min_dist = d
+                    min_name = name
+            if min_name is not None and min_dist <= max(bodies[min_name].radius * 2.5, 1.0):
+                pick_obj = bodies[min_name]
+        # If still no pick_obj, try using the camera->mouse ray and compute perpendicular distance
+        if pick_obj is None:
+            try:
+                ray = getattr(scene.mouse, 'ray', None)
+                origin = scene.camera.pos
+            except Exception:
+                ray = None
+                origin = None
+            if ray is not None and origin is not None:
+                # ray is a direction vector; compute perpendicular distance from ray to each body
+                min_name = None
+                min_dist = float('inf')
+                for name, body in bodies.items():
+                    # cross(origin->body, ray) magnitude divided by |ray| gives perpendicular distance
+                    vec = body.pos - origin
+                    d_perp = mag(cross(vec, ray)) / mag(ray)
+                    if d_perp < min_dist:
+                        min_dist = d_perp
+                        min_name = name
+                # Use a threshold relative to visual radius; ray-based distances are more accurate across camera angles
+                if min_name is not None and min_dist <= max(bodies[min_name].radius * 2.0, 0.8):
+                    pick_obj = bodies[min_name]
+
+    # If we have a pick_obj, find which body it corresponds to and handle selection
+    if pick_obj is None:
+        return
+
+    for name, body in bodies.items():
+        picked = False
+        if pick_obj == body:
+            picked = True
+        else:
+            picked_label = getattr(body, 'label', None)
+            if picked_label is not None and pick_obj == picked_label:
+                picked = True
+        if not picked:
+            continue
+
+        # Now handle Shift+click (relationship) or single click (show info)
+        if getattr(evt, 'shift', False):
+            selected.append(name)
+            if len(selected) == 2:
+                pair = tuple(sorted(selected))
+                rel = relationships.get(pair, f'No specific relationship defined for {selected[0]} and {selected[1]}.')
+                dist = mag(bodies[selected[0]].pos - bodies[selected[1]].pos) * 1.5e8 / 40
+                set_caption(f'Relationship: {rel}  Distance: ~{dist:.2e} km')
+                selected = []
+        else:
+            set_caption(f'{name}: {bodies_data[name]["info"]}')
+            selected = []
+        break
 
 scene.bind('click', on_click)
+# Also bind mousedown and mouseup to improve responsiveness when paused
+scene.bind('mousedown', on_click)
+scene.bind('mouseup', on_click)
 
 # Main loop: Simulate orbits
 t = 0
