@@ -86,6 +86,9 @@ relationships = {
     # Add more pairs, e.g., ('Jupiter', 'Saturn'): '...'
 }
 
+# Normalize relationships so order doesn't matter: map frozenset({a,b}) -> relation string
+relationships_map = {frozenset(k): v for k, v in relationships.items()}
+
 # Create scene
 scene = canvas(title='Solar System Model', width=800, height=600)
 scene.autoscale = True
@@ -98,10 +101,13 @@ for name, data in bodies_data.items():
     bodies[name] = sphere(pos=data['pos'], radius=data['radius'], color=data['color'], make_trail=False)
     # Label for name (optional) - attach to the sphere so we can update its position
     bodies[name].label = label(pos=bodies[name].pos + vector(0, data['radius']*1.2, 0), text=name, height=10, color=color.white, box=False)
+    # remember original color for highlighting toggles
+    bodies[name].orig_color = data['color']
 
 # Info display: use the caption area under the canvas (works reliably in vpython)
 # Pause control and caption helper
 paused = False
+selection_mode = False  # when True, clicks (without Shift) will act as selection
 
 def set_caption(msg: str):
     """Set the scene caption while preserving paused state marker.
@@ -134,20 +140,148 @@ def on_keydown(evt):
         paused = not paused
         state = 'Paused' if paused else 'Running'
         set_caption(f'{state}. Click a body for info. Shift+Click two for relationship.')
+    # Toggle selection-mode with 'm' so users can select without using Shift (avoids camera movement conflict)
+    global selection_mode
+    if k == 'm':
+        selection_mode = not selection_mode
+        set_caption(f"Selection mode {'ON' if selection_mode else 'OFF'}: click bodies to select (or press 'm' to toggle).")
+    # Press 'c' to clear any current selections and their visuals
+    if k == 'c':
+        # clear selected list and hide any selectors
+        for sname in list(selected):
+            sb = bodies.get(sname)
+            if sb is None:
+                continue
+            if hasattr(sb, 'selector'):
+                try:
+                    sb.selector.visible = False
+                except Exception:
+                    pass
+                try:
+                    del sb.selector
+                except Exception:
+                    pass
+            if hasattr(sb, 'orig_color'):
+                sb.color = sb.orig_color
+        selected.clear()
+        set_caption('Cleared selections.')
+    # Press 's' to enter selection mode that waits for two clicks (legacy synchronous mode)
+    if k == 's':
+        try:
+            select_two_with_wait()
+        except Exception as e:
+            set_caption(f'Error entering select mode: {e}')
 
 # Bind keydown event so user can press 'p' to pause/resume
 scene.bind('keydown', on_keydown)
+
+
+def pick_obj_from_event_or_mouse(evt):
+    """Return the picked object from an event or use proximity/ray fallback.
+
+    This mirrors the logic in on_click but packaged for reuse in synchronous
+    wait-for-click selection mode.
+    """
+    pick_obj = getattr(evt, 'pick', None)
+    if pick_obj is not None:
+        return pick_obj
+
+    # proximity fallback
+    try:
+        mp = scene.mouse.pos
+    except Exception:
+        mp = None
+    if mp is not None:
+        min_name = None
+        min_dist = float('inf')
+        for name, body in bodies.items():
+            d = mag(body.pos - mp)
+            if d < min_dist:
+                min_dist = d
+                min_name = name
+        if min_name is not None and min_dist <= max(bodies[min_name].radius * 2.5, 1.0):
+            return bodies[min_name]
+
+    # ray fallback
+    try:
+        ray = getattr(scene.mouse, 'ray', None)
+        origin = scene.camera.pos
+    except Exception:
+        ray = None
+        origin = None
+    if ray is not None and origin is not None:
+        min_name = None
+        min_dist = float('inf')
+        for name, body in bodies.items():
+            vec = body.pos - origin
+            d_perp = mag(cross(vec, ray)) / (mag(ray) if mag(ray) != 0 else 1.0)
+            if d_perp < min_dist:
+                min_dist = d_perp
+                min_name = name
+        if min_name is not None and min_dist <= max(bodies[min_name].radius * 2.0, 0.8):
+            return bodies[min_name]
+
+    return None
+
+
+def select_two_with_wait():
+    """Synchronous selection mode: wait for two clicks and show their relationship.
+
+    This uses scene.waitfor('click') so it works even when the main loop is
+    paused or the event system behaves differently in paused state.
+    """
+    set_caption('Selection mode: click two bodies (or click the same to cancel)')
+    sel_names = []
+    selectors = []
+    for i in range(2):
+        evt = scene.waitfor('click')
+        pickobj = pick_obj_from_event_or_mouse(evt)
+        if pickobj is None:
+            set_caption('No object picked; try again.')
+            return
+        # map pickobj to body name
+        picked_name = None
+        for name, body in bodies.items():
+            if pickobj == body or getattr(body, 'label', None) == pickobj:
+                picked_name = name
+                break
+        if picked_name is None:
+            set_caption('Picked object not recognized; aborting.')
+            return
+        # visual feedback
+        b = bodies[picked_name]
+        try:
+            sel = ring(pos=b.pos, axis=vector(0,1,0), radius=b.radius*1.4, thickness=max(b.radius*0.06, 0.05), color=color.cyan)
+            selectors.append(sel)
+        except Exception:
+            # fallback: tint color
+            b.color = color.cyan
+            selectors.append(('color', b))
+        sel_names.append(picked_name)
+
+    # show relationship for the two selected
+    pair = tuple(sorted(sel_names))
+    rel = relationships.get(pair, f'No specific relationship defined for {sel_names[0]} and {sel_names[1]}.')
+    dist = mag(bodies[sel_names[0]].pos - bodies[sel_names[1]].pos) * 1.5e8 / 40
+    set_caption(f'Selection: {sel_names[0]} & {sel_names[1]} -> {rel}  Distance: ~{dist:.2e} km')
+
+    # clear selectors and restore colors
+    for s in selectors:
+        if isinstance(s, tuple) and s[0] == 'color':
+            s[1].color = s[1].orig_color
+        else:
+            try:
+                s.visible = False
+            except Exception:
+                pass
 
 # Click handling
 selected = []  # Track selected bodies for Shift-click
 
 def on_click(evt):
     global selected
-    # Diagnostic: show event type and pick target for debugging when paused
+    # Determine pick target without noisy debug output
     pick_info = getattr(evt, 'pick', None)
-    evt_name = getattr(evt, 'event', None) or getattr(evt, 'type', None) or getattr(evt, 'name', None)
-    print(f'on_click fired: event={evt_name!r}, pick={pick_info!r}, paused={paused}')
-    set_caption(f'DEBUG event={evt_name!r} pick={type(pick_info).__name__}:{getattr(pick_info, "text", "")}')
 
     # Determine the object that should be considered "picked".
     pick_obj = pick_info
@@ -204,17 +338,62 @@ def on_click(evt):
                 picked = True
         if not picked:
             continue
-
         # Now handle Shift+click (relationship) or single click (show info)
-        if getattr(evt, 'shift', False):
-            selected.append(name)
-            if len(selected) == 2:
-                pair = tuple(sorted(selected))
-                rel = relationships.get(pair, f'No specific relationship defined for {selected[0]} and {selected[1]}.')
-                dist = mag(bodies[selected[0]].pos - bodies[selected[1]].pos) * 1.5e8 / 40
-                set_caption(f'Relationship: {rel}  Distance: ~{dist:.2e} km')
-                selected = []
+        # selection is active if user held Shift or toggled selection_mode (press 'm')
+        if (selection_mode or getattr(evt, 'shift', False)):
+            # Toggle selection: deselect if already selected
+            if name in selected:
+                # deselect
+                selected.remove(name)
+                # remove visual selector if exists
+                if hasattr(body, 'selector'):
+                    try:
+                        body.selector.visible = False
+                    except Exception:
+                        pass
+                    try:
+                        del body.selector
+                    except Exception:
+                        pass
+                # restore original color if we used color fallback
+                if hasattr(body, 'orig_color'):
+                    body.color = body.orig_color
+                # update caption to reflect deselection
+                set_caption(f'Deselected {name}.')
+            else:
+                # if already two selected, clear previous selection first
+                if len(selected) >= 2:
+                    # clear existing selectors
+                    for sname in list(selected):
+                        sb = bodies[sname]
+                        if hasattr(sb, 'selector'):
+                            try:
+                                sb.selector.visible = False
+                            except Exception:
+                                pass
+                            try:
+                                del sb.selector
+                            except Exception:
+                                pass
+                    selected.clear()
+                # select this body
+                selected.append(name)
+                # add a visual ring to indicate selection
+                try:
+                    body.selector = ring(pos=body.pos, axis=vector(0,1,0), radius=body.radius*1.4, thickness=max(body.radius*0.06, 0.05), color=color.green)
+                except Exception:
+                    # fallback: change color if ring not available
+                    body.color = color.green
+
+                # if now two selected, show relationship
+                if len(selected) == 2:
+                    # Show relationship and keep selectors visible until user clears (press 'c')
+                    pair_key = frozenset(selected)
+                    rel = relationships_map.get(pair_key, f'No specific relationship defined for {selected[0]} and {selected[1]}.')
+                    dist = mag(bodies[selected[0]].pos - bodies[selected[1]].pos) * 1.5e8 / 40
+                    set_caption(f'Relationship: {rel}  Distance: ~{dist:.2e} km  (press c to clear)')
         else:
+            # single click: show info about the body
             set_caption(f'{name}: {bodies_data[name]["info"]}')
             selected = []
         break
@@ -237,4 +416,10 @@ while True:
                 # Move the label with the body so it stays above the sphere
                 if hasattr(bodies[name], 'label'):
                     bodies[name].label.pos = bodies[name].pos + vector(0, data['radius']*1.2, 0)
+                # If a selector ring exists for this body, move it with the body so it follows during animation
+                if hasattr(bodies[name], 'selector'):
+                    try:
+                        bodies[name].selector.pos = bodies[name].pos
+                    except Exception:
+                        pass
         t += dt
