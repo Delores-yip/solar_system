@@ -139,7 +139,16 @@ def on_click(evt):
     global selected
     if evt.pick:  # Picked an object
         for name, body in bodies.items():
+            # evt.pick may be the sphere or the label attached to it. Treat both as a click on this body.
+            picked_body = False
             if evt.pick == body:
+                picked_body = True
+            else:
+                picked_label = getattr(body, 'label', None)
+                if picked_label is not None and evt.pick == picked_label:
+                    picked_body = True
+            if not picked_body:
+                continue
                 # Use the event's shift flag (evt.shift). Avoid using an undefined `keyboard` object.
                 if getattr(evt, 'shift', False):  # Shift pressed
                     selected.append(name)
