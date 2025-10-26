@@ -1,3 +1,5 @@
+# To quick start the solar system simulation please read the QUICKSTART.md file
+
 # Solar System Simulation - Web Application
 
 A modern web-based solar system simulation with interactive 3D visualization, real-time orbital mechanics, and educational content about celestial bodies.
