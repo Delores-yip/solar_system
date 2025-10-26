@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar System Simulation</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 3D Canvas -->
+        <div id="canvas-container">
+            <canvas id="scene-canvas"></canvas>
+        </div>
+        
+        <!-- Controls Panel -->
+        <div id="controls-panel">
+            <h3>Controls</h3>
+            <div class="control-group">
+                <button id="pause-btn" class="control-btn">
+                    <span id="pause-icon">⏸</span>
+                    <span id="pause-text">Pause</span>
+                </button>
+                <button id="reset-btn" class="control-btn">
+                    <span>🔄</span>
+                    <span>Reset</span>
+                </button>
+            </div>
+            
+            <div class="control-group">
+                <label for="speed-slider">Simulation Speed:</label>
+                <div class="slider-container">
+                    <input type="range" id="speed-slider" min="0.1" max="5" step="0.1" value="1">
+                    <span id="speed-value">1.0x</span>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div id="time-display">
+                    <strong>Time:</strong> <span id="time-value">0.00</span> days
+                </div>
+            </div>
+        </div>
+        
+        <!-- Info Panel -->
+        <div id="info-panel">
+            <h3 id="info-title">Solar System Simulation</h3>
+            <div id="info-content">
+                <p>Click on any planet to learn more about it.</p>
+                <p>Hold <strong>Shift</strong> and click two planets to see their relationship.</p>
+                <p>Use mouse to rotate the camera.</p>
+            </div>
+            <button id="close-info-btn" style="display: none;">✕ Close</button>
+        </div>
+        
+        <!-- Instructions Overlay -->
+        <div id="instructions">
+            <div class="instruction-item">🖱️ Click: View planet info</div>
+            <div class="instruction-item">⇧ Shift+Click: Compare two planets</div>
+            <div class="instruction-item">🖱️ Drag: Rotate camera</div>
+            <div class="instruction-item">🖱️ Scroll: Zoom</div>
+        </div>
+        
+        <!-- Loading Overlay -->
+        <div id="loading-overlay">
+            <div class="loader"></div>
+            <p>Loading Solar System...</p>
+        </div>
+        
+        <!-- Connection Status -->
+        <div id="connection-status" class="disconnected">
+            <span id="status-indicator">●</span>
+            <span id="status-text">Connecting...</span>
+        </div>
+    </div>
+    
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- OrbitControls for Three.js -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <!-- Socket.IO Client -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    
+    <!-- Application Scripts -->
+    <script src="js/api.js"></script>
+    <script src="js/scene.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
