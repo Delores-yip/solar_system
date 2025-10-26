@@ -237,6 +237,11 @@ Potential features for future versions:
 - Mobile touch controls
 - Multi-user synchronization
 
+## Screenshots of the solar system simulation
+![alt text](image.png)
+![alt text](image-1.png)
+![alt text](image-2.png)
+
 ## Credits
 
 - **VPython**: Original monolithic implementation
