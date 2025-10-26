@@ -47,7 +47,7 @@ solar_system_web/
 
 ### Simulation Controls
 - Play/Pause animation
-- Adjustable simulation speed (0.1x to 5x)
+- Adjustable simulation speed (0.1x to 100x)
 - Reset to initial state
 - Real-time time display
 
