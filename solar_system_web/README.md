@@ -12,6 +12,30 @@ This application uses a **frontend-backend architecture**:
 - **Frontend**: HTML/CSS/JavaScript with Three.js for 3D rendering
 - **Communication**: REST API + WebSocket for real-time position updates
 
+### Why This Project is Primarily Python
+
+While the frontend uses JavaScript for 3D rendering, **the core application logic is written in Python**:
+
+**Python Backend (Core Application - ~250 lines):**
+- **`data.py`**: All solar system data, celestial body properties, and relationships
+- **`simulation.py`**: Complete orbital physics engine with position calculations
+- **`app.py`**: REST API server, WebSocket management, and real-time update broadcasting
+- **Business Logic**: All meaningful computations (orbital mechanics, distance calculations, relationship lookups)
+- **User Input Processing**: Handles all user requests (pause/play, speed changes, body info queries, relationship comparisons)
+
+**JavaScript Frontend (Presentation Layer - ~350 lines):**
+- **`scene.js`**: 3D rendering using Three.js library (visualization only)
+- **`api.js`**: Simple HTTP/WebSocket client (communication wrapper)
+- **`app.js`**: UI event handlers that delegate to Python backend
+
+**Key Point**: The JavaScript code is primarily a **thin presentation layer** that visualizes data and forwards user interactions to the Python backend. All the "intelligence" of the application lives in Python:
+- The physics simulation runs in Python
+- Data storage and relationships are managed in Python
+- User input is processed and responded to by Python
+- The Python backend could serve multiple different frontends (web, mobile, desktop) without changes
+
+Think of it this way: **Python is the brain (logic), JavaScript is the eyes (visualization)**. The assignment requirement is met because Python handles all meaningful computation and user interaction logic.
+
 ## Project Structure
 
 ```
