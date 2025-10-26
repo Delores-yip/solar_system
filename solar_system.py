@@ -78,21 +78,22 @@ bodies_data = {
     }
 }
 
-# Relationships (pre-defined pairs; expand as needed)
 relationships = {
     ('Earth', 'Sun'): 'The average distance between Earth and the Sun is about 149.6 million km (1 AU). The Sun provides energy for life on Earth.',
     ('Venus', 'Earth'): 'Venus and Earth are similar in size and composition (both rocky planets), but Venus has a runaway greenhouse effect making it much hotter.',
     ('Mars', 'Earth'): 'Mars and Earth share similarities like polar ice caps and seasons, but Mars has a thinner atmosphere and is colder.',
-    # Add more pairs, e.g., ('Jupiter', 'Saturn'): '...'
+    ('Jupiter', 'Sun'): 'Jupiter orbits the Sun at an average distance of about 778 million km (5.2 AU). Its massive size helps protect inner planets by deflecting comets and asteroids.',
+    ('Saturn', 'Jupiter'): 'Saturn and Jupiter are both gas giants with massive atmospheres primarily composed of hydrogen and helium, but Saturn has a more prominent ring system and lower density.'
 }
 
 # Normalize relationships so order doesn't matter: map frozenset({a,b}) -> relation string
 relationships_map = {frozenset(k): v for k, v in relationships.items()}
 
 # Create scene
-scene = canvas(title='Solar System Model', width=800, height=600)
+scene = canvas(title='Solar System Model', width=960, height=540)
 scene.autoscale = True
 scene.forward = vector(0, -0.5, -1)  # Initial camera view
+
 
 # Create bodies as spheres
 bodies = {}
@@ -117,15 +118,18 @@ def set_caption(msg: str):
     """
     prefix = '[PAUSED] ' if paused else ''
     safe_msg = (prefix + msg)
-    # Use an inline-styled div so the caption is visible on dark or light themes.
-    scene.caption = f"<div style='background: rgba(0,0,0,0.65); color: #fff; padding: 8px; border-radius:6px; font-family: sans-serif; font-size:14px'>{safe_msg}</div>"
+    # Use the default VPython caption placement (no custom CSS). This
+    # restores the caption to its original/default location/formatting
+    # so the environment (browser or window) will place it as VPython
+    # normally does.
+    scene.caption = safe_msg
 
 # Initial caption
-set_caption('Click a body for info. Shift+Click two for relationship.')
+set_caption('Press \'p\' to pause. Left click a body for info, right click to drag. Press \'m\' + Click two for relationship.')
 
 # Simulation parameters
 dt = 0.1  # Time step (accelerated for visualization)
-time_scale = 100  # Speed up orbits
+time_scale = 80  # Speed up orbits
 
 # Key handling: toggle pause with 'p' and keep caption state
 def on_keydown(evt):
@@ -139,7 +143,7 @@ def on_keydown(evt):
     if k == 'p':
         paused = not paused
         state = 'Paused' if paused else 'Running'
-        set_caption(f'{state}. Click a body for info. Shift+Click two for relationship.')
+        set_caption(f'{state}. Click a body for info. Press \'m\' + Click two for relationship.')
     # Toggle selection-mode with 'm' so users can select without using Shift (avoids camera movement conflict)
     global selection_mode
     if k == 'm':
@@ -165,12 +169,7 @@ def on_keydown(evt):
                 sb.color = sb.orig_color
         selected.clear()
         set_caption('Cleared selections.')
-    # Press 's' to enter selection mode that waits for two clicks (legacy synchronous mode)
-    if k == 's':
-        try:
-            select_two_with_wait()
-        except Exception as e:
-            set_caption(f'Error entering select mode: {e}')
+
 
 # Bind keydown event so user can press 'p' to pause/resume
 scene.bind('keydown', on_keydown)
